@@ -1,0 +1,112 @@
+# =============================================================================
+# DYNAMIC CHARGE MD CONFIGURATION (Reference v20)
+# =============================================================================
+# This file controls the OpenMM-AIMNet2 hybrid simulation.
+# Parameters are grouped by function.
+
+# -----------------------------------------------------------------------------
+# 1. INPUT FILES (Topology & Coordinates)
+# -----------------------------------------------------------------------------
+# Provide either AMBER (prmtop/inpcrd) OR GROMACS (top/gro) inputs.
+prmtop: MOL_solv.prmtop
+inpcrd: MOL_solv.inpcrd
+# top: topol.top       # Uncomment for GROMACS
+# gro: conf.gro        # Uncomment for GROMACS
+
+ligand-resname: "MOL"  # The residue name of your ligand in the topology
+
+# -----------------------------------------------------------------------------
+# 2. SIMULATION PROTOCOL
+# -----------------------------------------------------------------------------
+platform: CPU          # Options: CUDA, OpenCL, CPU. (CUDA recommended for speed)
+cpu_threads: 4         # Only used if platform is CPU
+
+# Simulation Length
+segments: 10000        # Total number of segments to run
+steps_per_seg: 100     # MD steps per segment (charge is updated once per segment)
+# Total Steps = segments * steps_per_seg
+
+# Time Step & Integration
+dt: 0.0005             # Time step in picoseconds (ps). 
+                       # IMPORTANT: Use 0.002 for RIGID water.
+                       # IMPORTANT: Use 0.0005 or 0.001 for FLEXIBLE water.
+
+temperature: 300       # Kelvin
+friction: 5.0          # Langevin friction coefficient (1/ps)
+
+# -----------------------------------------------------------------------------
+# 3. PHYSICS & WATER MODEL (New in v20)
+# -----------------------------------------------------------------------------
+# Control the rigidity of the system.
+# For "Fairness" comparison vs Classical: Use constraints=HBonds, rigid-water=True
+# For "Superiority" (Polarization response): Use constraints=HBonds, rigid-water=False
+
+constraints: HBonds    # Options: 
+                       #   - HBonds   (Constrains X-H bonds; allows water angle bending if rigid-water=False)
+                       #   - AllBonds (Constrains all bond lengths)
+                       #   - None     (Fully flexible; requires very small dt < 0.5fs)
+
+rigid-water: False     # Options:
+                       #   - True  (Standard TIP3P/SPC behavior; fixed angle, fixed bonds)
+                       #   - False (Allows water to bend/vibrate; captures polarization better)
+
+# -----------------------------------------------------------------------------
+# 4. DYNAMIC CHARGE PARAMETERS (AIMNet2)
+# -----------------------------------------------------------------------------
+update-every: 1        # How often to run AIMNet2 inference (in segments). 1 = every segment.
+
+# Smoothing & Stability
+alpha: 0.5             # Exponential Moving Average (EMA) factor.
+                       # 1.0 = Instant update (noisy). 
+                       # 0.2 = Slow, smooth evolution. 0.5 is a good balance.
+
+dq_max: 0.3            # Maximum charge change allowed per atom per update (prevents shocks).
+q_abs_max: 2.0         # Cap on absolute charge magnitude (prevents runaway charges).
+
+# Split Scaling (Physics Enforcement)
+solute-charge-scale: 1.0   # Scale factor for Ligand charges (keep at 1.0 for physics).
+solvent-charge-scale: 2.0  # Scale factor for Water charges.
+                           # NOTE: AIMNet2 predicts gas-phase charges. Water in bulk is polarized.
+                           # A scale of ~1.5 to 2.0 often recovers correct water density/diffusion.
+
+constrain-mol-neutrality: False # If True, forces each molecule to sum to integer charge (0 for water).
+
+# -----------------------------------------------------------------------------
+# 5. WARMUP & MINIMIZATION
+# -----------------------------------------------------------------------------
+initial_minimize: True
+initial_minimize_iter: 5000
+
+# Warmup Phase (NVT equilibration with fixed charges before turning on AIMNet)
+warmup_segments: 20
+warmup_dt: 0.0005      # Keep consistent with main dt
+warmup_friction: 50.0  # Higher friction helps relax the system
+
+# Post-Update Minimization (Relaxes geometry after charge shock)
+post_minimize: False   # Can be set to True if system is unstable
+minimize_iter: 50
+
+# -----------------------------------------------------------------------------
+# 6. OUTPUTS
+# -----------------------------------------------------------------------------
+dcd: nvtmd_traj.dcd               # Trajectory file
+save-state: nvtmd_state.xml       # Restart file
+
+# Specialized Outputs
+xyz_with_charges: nvtmd_snapshots.xyz  # Contains Geometry AND Charge (q) column
+xyz_interval: 100                      # How often to write XYZ
+
+pdb_with_charges: nvtmd_snapshots.pdb  # PDB for visualization (Charge is in B-factor column)
+pdb_interval: 100
+
+energies_dat: nvtmd_energies.dat
+energies_interval: 1
+updates-dat: nvtmd_updates.dat         # Logs dQ statistics and ΔPotentialEnergy
+
+# -----------------------------------------------------------------------------
+# 7. PRESSURE CONTROL (NPT)
+# -----------------------------------------------------------------------------
+barostat: True         # Enable MonteCarloBarostat
+pressure: 1.0          # Bar
+barostat-interval: 50  # Frequency of volume moves
+force-periodic: True   # Ensure system is treated as periodic
