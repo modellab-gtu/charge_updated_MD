@@ -89,7 +89,7 @@ def _add_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dcd", default="traj.dcd", help="Binary DCD trajectory filename")
     parser.add_argument("--save-state", default="state.xml", help="Final state XML filename")
     parser.add_argument("--save-minimized", default="minimized.pdb", help="Filename for minimized structure (default: minimized.pdb)")
-    parser.add_argument("--restart-state", default="state.xml", help="Optional XML state file to start from (positions/box only)")
+    parser.add_argument("--restart-state", default=None, help="Optional XML state file to start from (positions/box only)")
     
     parser.add_argument("--initial-minimize", action="store_true", help="Run an initial energy minimization before MD")
     parser.add_argument("--initial-minimize-iter", type=int, default=2000, help="Max iterations for initial minimization")
